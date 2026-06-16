@@ -4,13 +4,13 @@ import { Link, useNavigate } from 'react-router-dom';
 
 function StatCard({ icon, title, value }) {
   return (
-    <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-      <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '1rem', borderRadius: '12px' }}>
+    <div className="glass-panel dash-stat-card">
+      <div className="dash-stat-icon">
         {icon}
       </div>
       <div>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>{title}</p>
-        <h3 style={{ fontSize: '1.75rem', fontWeight: 600, margin: 0 }}>{value}</h3>
+        <p className="dash-stat-title">{title}</p>
+        <h3 className="dash-stat-value">{value}</h3>
       </div>
     </div>
   );
@@ -43,75 +43,72 @@ export default function Dashboard() {
   })();
 
   return (
-    <div style={{ padding: '1rem' }}>
-      <header style={{ marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="dash-container">
+      <header className="dash-header">
         <div>
-          <h1 className="gradient-text" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Welcome back!</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Here is your interview preparation progress.</p>
+          <h1 className="gradient-text dash-title">Welcome back!</h1>
+          <p className="dash-subtitle">Here is your interview preparation progress.</p>
         </div>
-        <Link to="/interviews" className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <Link to="/interviews" className="btn-primary dash-start-btn">
           <Zap size={20} />
           Start New Interview
         </Link>
       </header>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+      <section className="dash-stats-grid">
         <StatCard icon={<Activity color="var(--success)" />} title="Average Score" value={stats.avgScore + '%'} />
         <StatCard icon={<Target color="var(--warning)" />} title="Interviews Taken" value={stats.totalTaken} />
         <StatCard icon={<Clock color="var(--accent-primary)" />} title="Practice Hours" value={stats.practiceHours} />
       </section>
 
-      <section style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
+      <section className="dash-content-grid">
         <div className="glass-panel">
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', marginTop: 0 }}>
+          <h2 className="dash-section-title">
             Recent Performance
-            <Link to="/history" style={{ fontSize: '0.9rem', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', fontWeight: 'normal' }}>
+            <Link to="/history" className="dash-view-link">
               View History <ChevronRight size={16} />
             </Link>
           </h2>
 
-          <div style={{ height: '200px', display: 'flex', alignItems: 'flex-end', gap: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+          <div className="dash-chart">
             {chartData.map((score, i) => (
               <div
                 key={i}
+                className="dash-chart-bar"
                 style={{
-                  flex: 1,
-                  background: score > 10 ? 'var(--accent-primary)' : 'var(--bg-secondary)',
                   height: score + '%',
-                  borderRadius: '4px 4px 0 0',
+                  background: score > 10 ? 'var(--accent-primary)' : 'var(--bg-secondary)',
                   opacity: i === chartData.length - 1 ? 1 : 0.6,
-                  transition: 'height 1s ease-out'
                 }}
               />
             ))}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+          <div className="dash-chart-labels">
             <span>Oldest</span><span></span><span></span><span></span><span></span><span></span><span>Latest</span>
           </div>
         </div>
 
         <div className="glass-panel">
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', marginTop: 0 }}>Recent Interviews</h2>
+          <h2 className="dash-section-title-sm">Recent Interviews</h2>
           {history.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)' }}>No interviews completed yet. Start one to see results here!</p>
           ) : (
-            <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '1rem', padding: 0, margin: 0 }}>
+            <ul className="dash-interview-list">
               {history.slice(0, 3).map(record => (
                 <li
                   key={record.id}
-                  style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-color)', cursor: 'pointer' }}
+                  className="dash-interview-item"
                   onClick={() => navigate('/interview/result/' + record.id)}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                    <h4 style={{ fontSize: '1rem', margin: 0 }}>{record.domain}</h4>
-                    <span style={{
-                      fontWeight: 'bold',
+                  <div className="dash-interview-row">
+                    <h4 className="dash-interview-domain">{record.domain}</h4>
+                    <span className="dash-interview-score" style={{
                       color: record.scores.overall >= 80 ? 'var(--success)' : record.scores.overall >= 60 ? 'var(--warning)' : 'var(--danger)'
                     }}>
                       {record.scores.overall}%
                     </span>
                   </div>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                  <p className="dash-interview-date">
                     {new Date(record.date).toLocaleDateString()}
                   </p>
                 </li>
