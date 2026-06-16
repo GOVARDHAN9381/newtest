@@ -26,7 +26,7 @@ jobs:
       - name: Install Frontend Dependencies
         run: |
           cd frontend
-          npm ci
+          npm ci --legacy-peer-deps
 
       - name: Build Frontend Application
         run: |
@@ -57,7 +57,7 @@ jobs:
       - name: Install Live E2E Test Dependencies
         run: |
           cd frontend/live-test
-          npm ci
+          npm ci --legacy-peer-deps
 
       - name: Install Playwright Chromium Browser
         run: |

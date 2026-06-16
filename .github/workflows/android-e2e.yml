@@ -32,7 +32,7 @@ jobs:
       - name: Install Frontend & Capacitor Dependencies
         run: |
           cd frontend
-          npm ci
+          npm ci --legacy-peer-deps
 
       - name: Build Web App
         run: |
@@ -70,7 +70,7 @@ jobs:
             
             # Install Appium test dependencies and run tests
             cd android-test
-            npm ci
+            npm ci --legacy-peer-deps
             APPIUM_HOST=localhost APPIUM_PORT=4723 npm test
 
       - name: Prepare Reports for GitHub Pages Publishing
