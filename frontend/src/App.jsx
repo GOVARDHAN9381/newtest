@@ -132,8 +132,9 @@ function AppContent() {
 }
 
 function App() {
+  const basename = import.meta.env.DEV ? '/' : '/newtest';
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <AppContent />
     </BrowserRouter>
   );

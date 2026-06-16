@@ -1,0 +1,88 @@
+name: Deploy & Web E2E Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-deploy-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-size: 20
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Frontend Application
+        run: |
+          cd frontend
+          npm run build
+          # Create subdirectories for routing to prevent 404s on direct navigation
+          mkdir -p dist/login dist/signup dist/dashboard dist/interviews dist/courses dist/history dist/resume dist/challenges
+          cp dist/index.html dist/login/index.html
+          cp dist/index.html dist/signup/index.html
+          cp dist/index.html dist/dashboard/index.html
+          cp dist/index.html dist/interviews/index.html
+          cp dist/index.html dist/courses/index.html
+          cp dist/index.html dist/history/index.html
+          cp dist/index.html dist/resume/index.html
+          cp dist/index.html dist/challenges/index.html
+
+      - name: Deploy Web App to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./frontend/dist
+          keep_files: true
+
+      - name: Wait for Deployment to be Live (HTTP 200)
+        run: |
+          node frontend/live-test/verify-deployment.js https://GOVARDHAN9381.github.io/newtest/
+
+      - name: Install Live E2E Test Dependencies
+        run: |
+          cd frontend/live-test
+          npm ci
+
+      - name: Install Playwright Chromium Browser
+        run: |
+          cd frontend/live-test
+          npx playwright install --with-deps chromium
+
+      - name: Execute Live E2E Tests
+        env:
+          BASE_URL: https://GOVARDHAN9381.github.io/newtest
+        run: |
+          cd frontend/live-test
+          npm test
+
+      - name: Upload Test Results Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: web-e2e-test-results
+          path: Test Results/
+
+      - name: Publish GitHub Action Step Summary
+        if: always()
+        run: |
+          if [ -f "Test Results/Summary/summary.md" ]; then
+            cat "Test Results/Summary/summary.md" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "E2E Test summary file not found." >> $GITHUB_STEP_SUMMARY
+          fi

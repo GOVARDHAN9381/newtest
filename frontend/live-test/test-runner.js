@@ -17,14 +17,32 @@ const path = require('path');
 const fs = require('fs');
 
 // ─── Config ──────────────────────────────────────────────────────────
-const BASE_URL = 'http://localhost:5173';
-const REPORTS_DIR = path.join(__dirname, 'reports');
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5173';
 const TIMEOUT = 10000; // 10s per test
 
-// ─── Ensure reports folder ──────────────────────────────────────────
-if (!fs.existsSync(REPORTS_DIR)) {
-  fs.mkdirSync(REPORTS_DIR, { recursive: true });
-}
+const WORKSPACE_ROOT = path.resolve(__dirname, '..', '..');
+const TEST_RESULTS_DIR = path.join(WORKSPACE_ROOT, 'Test Results');
+const EXCEL_DIR = path.join(TEST_RESULTS_DIR, 'Excel');
+const HTML_DIR = path.join(TEST_RESULTS_DIR, 'HTML');
+const SCREENSHOTS_DIR = path.join(TEST_RESULTS_DIR, 'Screenshots');
+const LOGS_DIR = path.join(TEST_RESULTS_DIR, 'Logs');
+const SUMMARY_DIR = path.join(TEST_RESULTS_DIR, 'Summary');
+
+// ─── Ensure folders ──────────────────────────────────────────────────
+[EXCEL_DIR, HTML_DIR, SCREENSHOTS_DIR, LOGS_DIR, SUMMARY_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+// Setup log stream
+const logStream = fs.createWriteStream(path.join(LOGS_DIR, 'execution.log'), { flags: 'a' });
+const originalConsoleLog = console.log;
+console.log = function(...args) {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+  originalConsoleLog.apply(console, args);
+  logStream.write(msg + '\n');
+};
 
 // ─── Test results storage ───────────────────────────────────────────
 const results = [];
@@ -44,6 +62,12 @@ async function runTest(name, category, fn, page) {
   } catch (err) {
     status = 'FAIL';
     errorMsg = err.message?.substring(0, 200) || String(err);
+    try {
+      const ssPath = path.join(SCREENSHOTS_DIR, `${id}.png`);
+      await page.screenshot({ path: ssPath });
+    } catch (ssErr) {
+      // Just log warning if screenshot fails (e.g. page is closed)
+    }
   }
 
   const duration = Date.now() - start;
@@ -71,6 +95,7 @@ async function doLogin(page) {
 //  MAIN TEST SUITE — 100 TEST CASES
 // ═══════════════════════════════════════════════════════════════════
 async function main() {
+  const startTime = Date.now();
   console.log('\n🚀 Interviu AI — Live Test Suite');
   console.log('═'.repeat(60));
   console.log(`Target: ${BASE_URL}`);
@@ -793,17 +818,230 @@ async function main() {
   }
 
   // ── Save Excel ──
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-  const fileName = `Interviu_AI_Test_Report_${timestamp}.xlsx`;
-  const filePath = path.join(REPORTS_DIR, fileName);
+  const excelPath = path.join(EXCEL_DIR, 'Automation_Test_Report.xlsx');
+  await workbook.xlsx.writeFile(excelPath);
+  console.log(`✅ Excel report saved: ${excelPath}`);
 
-  await workbook.xlsx.writeFile(filePath);
+  // ── Save HTML ──
+  const duration = `${Date.now() - startTime}ms`;
+  const htmlContent = generateHTMLReport(results, passCount, failCount, duration, new Date().toLocaleString());
+  const htmlPath = path.join(HTML_DIR, 'execution-report.html');
+  fs.writeFileSync(htmlPath, htmlContent, 'utf8');
+  console.log(`✅ HTML report saved: ${htmlPath}`);
 
-  console.log(`✅ Report saved: ${filePath}`);
+  // ── Save Summary ──
+  const summaryContent = generateSummaryMarkdown(results, passCount, failCount);
+  const summaryPath = path.join(SUMMARY_DIR, 'summary.md');
+  fs.writeFileSync(summaryPath, summaryContent, 'utf8');
+  console.log(`✅ Summary markdown saved: ${summaryPath}`);
+
   console.log('\n' + '═'.repeat(60));
   console.log(`📊 RESULTS: ${passCount} PASSED | ${failCount} FAILED | ${results.length} TOTAL`);
   console.log(`📈 PASS RATE: ${((passCount / results.length) * 100).toFixed(1)}%`);
   console.log('═'.repeat(60) + '\n');
+
+  // Close log stream
+  logStream.end();
+}
+
+function generateHTMLReport(results, passCount, failCount, duration, dateString) {
+  const passRate = ((passCount / results.length) * 100).toFixed(1);
+  const rows = results.map(r => `
+    <tr class="test-row ${r.status.toLowerCase()}">
+      <td><strong>${r.id}</strong></td>
+      <td>${r.name}</td>
+      <td><span class="badge category">${r.category}</span></td>
+      <td><span class="badge status ${r.status.toLowerCase()}">${r.status}</span></td>
+      <td>${r.duration}</td>
+      <td class="error-cell">${r.error ? escapeHtml(r.error) : ''}</td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interviu AI - Automation Test Report</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --panel-dark: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --pass: #10b981;
+      --fail: #ef4444;
+      --accent: #6366f1;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      margin: 0;
+      padding: 2rem;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    h1 { margin: 0; font-size: 1.8rem; background: linear-gradient(to right, #6366f1, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stats-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--panel-dark);
+      padding: 1.5rem;
+      border-radius: 12px;
+      text-align: center;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .stat-value { font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem; }
+    .stat-label { color: var(--text-muted); font-size: 0.9rem; }
+    .stat-card.pass .stat-value { color: var(--pass); }
+    .stat-card.fail .stat-value { color: var(--fail); }
+    .filters {
+      margin-bottom: 1rem;
+      display: flex;
+      gap: 0.5rem;
+    }
+    button {
+      background: var(--panel-dark);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-main);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button.active { background: var(--accent); border-color: var(--accent); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel-dark);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    th, td { padding: 1rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    th { background: rgba(0,0,0,0.2); color: var(--text-muted); font-weight: 600; }
+    .badge {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .badge.category { background: rgba(99,102,241,0.2); color: #818cf8; }
+    .badge.status.pass { background: rgba(16,185,129,0.2); color: #34d399; }
+    .badge.status.fail { background: rgba(239,68,68,0.2); color: #f87171; }
+    .error-cell { color: var(--fail); font-family: monospace; font-size: 0.85rem; max-width: 300px; word-break: break-all; }
+  </style>
+  <script>
+    function filterResults(status) {
+      document.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      document.querySelectorAll('.test-row').forEach(row => {
+        if (status === 'all' || row.classList.contains(status)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Interviu AI - Automation Test Report</h1>
+      <div style="color: var(--text-muted); margin-top: 0.5rem;">Target: <a href="${BASE_URL}" style="color: var(--accent); text-decoration: none;" target="_blank">${BASE_URL}</a> | Date: ${dateString}</div>
+    </div>
+    <div style="font-size: 0.9rem; color: var(--text-muted);">Execution Time: ${duration}</div>
+  </header>
+
+  <div class="stats-container">
+    <div class="stat-card">
+      <div class="stat-value">${results.length}</div>
+      <div class="stat-label">Total Tests</div>
+    </div>
+    <div class="stat-card pass">
+      <div class="stat-value">${passCount}</div>
+      <div class="stat-label">Passed</div>
+    </div>
+    <div class="stat-card fail">
+      <div class="stat-value">${failCount}</div>
+      <div class="stat-label">Failed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color: var(--accent);">${passRate}%</div>
+      <div class="stat-label">Pass Rate</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <button class="active" onclick="filterResults('all')">All Tests</button>
+    <button onclick="filterResults('pass')">Passed</button>
+    <button onclick="filterResults('fail')">Failed</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Test Name</th>
+        <th>Category</th>
+        <th>Status</th>
+        <th>Duration</th>
+        <th>Error Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+</body>
+</html>`;
+}
+
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function generateSummaryMarkdown(results, passCount, failCount) {
+  const passRate = ((passCount / results.length) * 100).toFixed(1);
+  const skippedCount = 0;
+  const failedTests = results.filter(r => r.status === 'FAIL');
+  let failedSection = '';
+  if (failedTests.length > 0) {
+    failedSection = failedTests.map(t => `- ${t.name}\n  - ${t.error}`).join('\n');
+  } else {
+    failedSection = 'None';
+  }
+
+  return `# Live GitHub Pages E2E Test Summary
+
+Deployment URL:
+${BASE_URL}
+
+Total Tests: ${results.length}
+Passed: ${passCount}
+Failed: ${failCount}
+Skipped: ${skippedCount}
+Pass Percentage: ${passRate}%
+
+Failed Tests:
+${failedSection}
+`;
 }
 
 main().catch(err => {

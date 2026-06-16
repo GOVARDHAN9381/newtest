@@ -1,0 +1,122 @@
+name: Android Appium E2E & Report Publish
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android-e2e-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Frontend & Capacitor Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Web App
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Sync Capacitor Android
+        run: |
+          cd frontend
+          npx cap sync android
+
+      - name: Build Android Debug APK
+        run: |
+          cd frontend/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Setup Android Emulator & Run Appium Tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu off -no-audio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: |
+            # Start Appium server in background
+            npm install -g appium
+            appium driver install uiautomator2
+            appium --log appium.log &
+            
+            # Wait for Appium to be ready
+            sleep 10
+            
+            # Install Appium test dependencies and run tests
+            cd android-test
+            npm ci
+            APPIUM_HOST=localhost APPIUM_PORT=4723 npm test
+
+      - name: Prepare Reports for GitHub Pages Publishing
+        if: always()
+        run: |
+          # Create a structured staging directory for Github Pages
+          mkdir -p gh-pages-reports
+          
+          # Copy files to match reports/latest structure
+          if [ -d "Test Results" ]; then
+            cp "Test Results/HTML/execution-report.html" gh-pages-reports/ || true
+            cp "Test Results/Summary/summary.md" gh-pages-reports/ || true
+            if [ -d "Test Results/Screenshots" ]; then cp -r "Test Results/Screenshots" gh-pages-reports/screenshots || true; fi
+            if [ -d "Test Results/Logs" ]; then cp -r "Test Results/Logs" gh-pages-reports/logs || true; fi
+          fi
+
+      - name: Publish Latest Report to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: always()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages-reports
+          destination_dir: reports/latest
+          keep_files: true
+
+      - name: Publish Historical Report to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: always()
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages-reports
+          destination_dir: reports/history/build-${{ github.run_number }}
+          keep_files: true
+
+      - name: Upload Test Results Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-e2e-test-results
+          path: Test Results/
+
+      - name: Publish GitHub Action Step Summary
+        if: always()
+        run: |
+          if [ -f "Test Results/Summary/summary.md" ]; then
+            cat "Test Results/Summary/summary.md" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Android E2E Test summary file not found." >> $GITHUB_STEP_SUMMARY
+          fi

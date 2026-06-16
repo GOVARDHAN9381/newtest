@@ -1,0 +1,13 @@
+{
+  "name": "interviu-android-tests",
+  "version": "1.0.0",
+  "description": "Appium E2E tests for Interviu AI Android App",
+  "main": "test-runner-appium.js",
+  "scripts": {
+    "test": "node test-runner-appium.js"
+  },
+  "dependencies": {
+    "webdriverio": "^8.39.0",
+    "exceljs": "^4.4.0"
+  }
+}
